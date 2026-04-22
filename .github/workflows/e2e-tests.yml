@@ -1,0 +1,77 @@
+name: Sovereign E2E Pipeline - SGEMM Kernel
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  sgemm-validation:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+
+    - name: 🔨 Forge SGEMM Kernel
+      run: |
+        echo "Compiling SGEMM kernel with AVX2 and FMA..."
+        gcc -O3 -mavx2 -mfma test_kernel_benchmark.c kernel_karpathy.c -o test_bench -lm
+        if [ $? -eq 0 ]; then
+          echo "✅ Compilation successful"
+        else
+          echo "❌ Compilation failed"
+          exit 1
+        fi
+
+    - name: 🧪 Trial: Correctness Validation
+      run: |
+        echo "Running correctness validation..."
+        ./test_bench 2>&1 | tee test_output.log
+        
+        # Check if PASS
+        if grep -q "\[PASS\] Correctness" test_output.log; then
+          echo "✅ Correctness test PASSED"
+        else
+          echo "❌ Correctness test FAILED"
+          cat test_output.log
+          exit 1
+        fi
+
+    - name: 📊 Trial: Benchmark Consistency
+      run: |
+        echo "Verifying benchmark consistency..."
+        if grep -q "\[PASS\] Consistency" test_output.log; then
+          echo "✅ Benchmark consistency test PASSED"
+        else
+          echo "❌ Benchmark consistency test FAILED"
+          cat test_output.log
+          exit 1
+        fi
+
+    - name: 📈 Extract Loot (Performance Metrics)
+      run: |
+        echo "Extracting Sovereign metrics..."
+        grep "Median:" test_output.log || echo "Median latency not found"
+        grep "GFLOPS" test_output.log || echo "GFLOPS not found"
+
+    - name: 🛡️ Final Sovereign Validation
+      run: |
+        echo "✅ All e2e tests completed successfully!"
+        echo "🎖️ KERNEL VANGUARD APPROVED"
+
+    - name: Upload Battle Logs
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: sgemm-battle-logs
+        path: test_output.log
